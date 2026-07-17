@@ -17,6 +17,7 @@ from retrieval.bm25 import BM25Retriever
 from retrieval.vector import VectorRetriever
 from retrieval.fusion import reciprocal_rank_fusion
 from retrieval.rerank import CrossEncoderReranker
+from grounding.citation_validator import validate_citations
 
 # Load env configurations
 load_dotenv()
@@ -377,6 +378,73 @@ def decide_next_node(state: AgentState) -> str:
         return "retrieve"
 
 
+def validate_citations_node(state: AgentState) -> Dict[str, Any]:
+    """Validates the citations in the generated response."""
+    route = state["route"]
+    # We only validate responses that underwent retrieval (direct_retrieval or sub_questions)
+    if route not in ["direct_retrieval", "sub_questions"]:
+        logger.info("Skipping citation validation because query was not resolved via retrieval.")
+        return {"failed_citations": [], "retry_count": state.get("retry_count", 0)}
+        
+    answer = state["response"]
+    chunks = state["retrieved_chunks"]
+    
+    # Special fallback check - if the answer is the fallback string, skip validation to avoid loops
+    if "insufficient verified information" in answer.lower() or "insufficient information" in answer.lower():
+        logger.info("Response is fallback message. Skipping citation validation.")
+        return {"failed_citations": [], "retry_count": state.get("retry_count", 0)}
+        
+    try:
+        llm = get_llm()
+        result = validate_citations(answer, chunks, llm)
+        
+        current_retry = state.get("retry_count", 0)
+        if not result["is_valid"]:
+            new_retry = current_retry + 1
+            logger.warning(f"Citation validation FAILED on attempt {new_retry}. Failures: {result['failed_citations']}")
+            
+            ret_dict = {
+                "failed_citations": result["failed_citations"],
+                "retry_count": new_retry
+            }
+            
+            # If max retries is reached (attempt 2), override the response with clean fallback
+            if new_retry >= 2:
+                logger.warning("Max retries reached. Overriding response with clean fallback.")
+                ret_dict["response"] = "Insufficient verified information is available to answer the query."
+                ret_dict["failed_citations"] = []  # Clear to route to end
+                
+            return ret_dict
+        else:
+            logger.info("Citation validation PASSED.")
+            return {
+                "failed_citations": [],
+                "retry_count": current_retry
+            }
+    except Exception as e:
+        logger.error(f"Error during citation validation node execution: {e}. Passing through.")
+        return {
+            "failed_citations": [],
+            "retry_count": state.get("retry_count", 0)
+        }
+
+
+def should_retry_edge(state: AgentState) -> str:
+    """Decides whether to retry synthesis or end execution based on validation results."""
+    failed = state.get("failed_citations", [])
+    retry = state.get("retry_count", 0)
+    
+    if not failed:
+        logger.info("Validation passed. Routing to END.")
+        return "end"
+    elif retry >= 2:
+        logger.warning(f"Max validation retries reached ({retry}). Routing to END.")
+        return "end"
+    else:
+        logger.info(f"Routing back to synthesize for retry attempt {retry + 1} due to validation failures.")
+        return "retry"
+
+
 # --- BUILD STATE GRAPH ---
 
 def create_agent_graph() -> StateGraph:
@@ -390,6 +458,7 @@ def create_agent_graph() -> StateGraph:
     workflow.add_node("tool", execute_tool_node)
     workflow.add_node("clarify", clarify_query_node)
     workflow.add_node("synthesize", synthesize_response_node)
+    workflow.add_node("validate", validate_citations_node)
     
     # Define Entry Point
     workflow.set_entry_point("router")
@@ -410,10 +479,20 @@ def create_agent_graph() -> StateGraph:
     workflow.add_edge("retrieve", "synthesize")
     workflow.add_edge("decompose", "synthesize")
     workflow.add_edge("tool", "synthesize")
+    workflow.add_edge("synthesize", "validate")
+    
+    # Conditional edge from validate
+    workflow.add_conditional_edges(
+        "validate",
+        should_retry_edge,
+        {
+            "retry": "synthesize",
+            "end": END
+        }
+    )
     
     # Define End Points
     workflow.add_edge("clarify", END)
-    workflow.add_edge("synthesize", END)
     
     return workflow.compile()
 

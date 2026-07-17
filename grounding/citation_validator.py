@@ -86,18 +86,16 @@ def validate_citations(
         chunk = retrieved_map[chunk_id]
         chunk_text = chunk.text
         
-        system_prompt = (
-            "You are an NLI (Natural Language Inference) validation engine.\n"
-            "Your task is to determine if a claim is logically supported and entailed by the provided reference text.\n"
-            "Answer strictly with YES or NO. Do not add any explanation or preamble.\n\n"
-            "Reference Text:\n"
-            f"{chunk_text}\n\n"
-            f"Claim to verify: '{claim}'\n\n"
-            "Is the claim fully supported and true according to the Reference Text? (YES/NO):"
-        )
-        
         messages = [
-            SystemMessage(content=system_prompt)
+            SystemMessage(content="You are an NLI (Natural Language Inference) validation engine."),
+            HumanMessage(content=(
+                "Your task is to determine if a claim is logically supported and entailed by the provided reference text.\n"
+                "Answer strictly with YES or NO. Do not add any explanation or preamble.\n\n"
+                "Reference Text:\n"
+                f"{chunk_text}\n\n"
+                f"Claim to verify: '{claim}'\n\n"
+                "Is the claim fully supported and true according to the Reference Text? (YES/NO):"
+            ))
         ]
         
         try:
