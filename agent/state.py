@@ -25,3 +25,5 @@ class AgentState(TypedDict):
     tool_output: str
     clarification_message: str
     response: str
+    retry_count: int
+    failed_citations: List[str]

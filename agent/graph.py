@@ -159,7 +159,9 @@ def route_query_node(state: AgentState) -> Dict[str, Any]:
             return {
                 "route": route,
                 "tool_input": tool_input,
-                "clarification_message": "Could you please clarify what specific academic standing or credit transfer rule you are asking about?" if route == "clarify" else ""
+                "clarification_message": "Could you please clarify what specific academic standing or credit transfer rule you are asking about?" if route == "clarify" else "",
+                "retry_count": 0,
+                "failed_citations": []
             }
         else:
             logger.warning(f"No JSON found in response. Raw response: {content_str}")
@@ -170,7 +172,9 @@ def route_query_node(state: AgentState) -> Dict[str, Any]:
         return {
             "route": "direct_retrieval",
             "tool_input": {},
-            "clarification_message": ""
+            "clarification_message": "",
+            "retry_count": 0,
+            "failed_citations": []
         }
 
 
@@ -277,26 +281,85 @@ def clarify_query_node(state: AgentState) -> Dict[str, Any]:
     return {}
 
 
-def synthesize_response_placeholder_node(state: AgentState) -> Dict[str, Any]:
-    """Placeholder synthesis node for Day 3. Renders state variables for testing."""
+def synthesize_response_node(state: AgentState) -> Dict[str, Any]:
+    """Generates a cited response from Gemini based on the retrieved policy chunks."""
     route = state["route"]
-    logger.info("Executing placeholder synthesis node.")
+    query = state["query"]
+    logger.info("Executing response synthesis node.")
     
     if route == "clarify":
-        ans = state["clarification_message"]
-    elif route == "tool_call":
-        ans = f"Calculated credit audit results:\n\n{state['tool_output']}"
-    else:
-        # Direct retrieval or sub_questions
-        chunks = state["retrieved_chunks"]
-        ids = [c.chunk_id for c in chunks]
-        ans = (
-            f"Placeholder answer for Day 3.\n"
-            f"Sub-queries executed: {state.get('current_sub_queries', [])}\n"
-            f"Retrieved {len(chunks)} chunks: {ids}"
+        return {"response": state["clarification_message"]}
+        
+    # For tool calls, ask Gemini to format the numeric results in a friendly advising tone
+    if route == "tool_call":
+        tool_output = state["tool_output"]
+        system_prompt = (
+            "You are a helpful and precise university academic policy advisor.\n"
+            "The user asked a query that required credit calculator verification.\n"
+            "Here is the raw numeric credit/GPA audit output:\n"
+            f"{tool_output}\n\n"
+            "Your task is to write a friendly, supportive, and clear advisor response explaining "
+            "these audit results to the student. Maintain accuracy and do not add any citations "
+            "since this is derived from direct user input metrics."
+        )
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=f"User Query: {query}")
+        ]
+        try:
+            llm = get_llm()
+            res = llm.invoke(messages)
+            ans = extract_text_content(res.content)
+            return {"response": ans}
+        except Exception as e:
+            logger.error(f"Failed to synthesize tool call explanation: {e}")
+            return {"response": f"Calculated credit audit results:\n\n{tool_output}"}
+
+    # For direct retrieval or sub_questions, synthesize based on chunks
+    chunks = state["retrieved_chunks"]
+    if not chunks:
+        return {"response": "Insufficient verified information is available to answer the query."}
+        
+    chunks_text = ""
+    for c in chunks:
+        chunks_text += f"Reference Chunk ID: {c.chunk_id}\nContent:\n{c.text}\n---\n"
+        
+    system_prompt = (
+        "You are a helpful and precise university academic policy advisor.\n"
+        "Your goal is to answer the student's question based strictly on the provided policy document chunks.\n\n"
+        "CRITICAL RULES:\n"
+        "1. Every factual statement or claim you make must be immediately followed by a citation pointing to the exact Reference Chunk ID it came from, formatted as `[filename#chunk_idx]`. For example: 'Undergraduate students must maintain a cumulative GPA of 2.0 or higher to remain in good academic standing [academic_standing.txt#chunk_1].'\n"
+        "2. Place the citation right next to the specific sentence/fact it supports. Do NOT group citations at the end of paragraphs.\n"
+        "3. Only cite the reference chunks provided. Do NOT make up any chunk IDs.\n"
+        "4. Do NOT make any claims that cannot be directly supported by the text. If the references do not contain enough information to answer a part of the query, explicitly state that there is insufficient information for that part.\n"
+        "5. If you cannot answer the user query at all based on the references, respond exactly with: 'Insufficient verified information is available to answer the query.'\n\n"
+        "References:\n"
+        f"{chunks_text}"
+    )
+    
+    # Prepend failed citations feedback if retry turn
+    if state.get("failed_citations"):
+        feedback = "\n".join(state["failed_citations"])
+        system_prompt += (
+            f"\n\nIMPORTANT CORRECTION REQUIRED:\n"
+            f"Your previous response attempt was rejected due to the following validation errors:\n"
+            f"{feedback}\n"
+            f"Please rewrite the response, correcting these citations and removing any claims not fully supported by the reference texts. Do not reuse any invalid citations."
         )
         
-    return {"response": ans}
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=f"Student Question: {query}")
+    ]
+    
+    try:
+        llm = get_llm()
+        res = llm.invoke(messages)
+        ans = extract_text_content(res.content)
+        return {"response": ans}
+    except Exception as e:
+        logger.error(f"Failed to synthesize response: {e}")
+        return {"response": "Insufficient verified information is available to answer the query."}
 
 
 # --- CONDITIONAL ROUTER ---
@@ -326,7 +389,7 @@ def create_agent_graph() -> StateGraph:
     workflow.add_node("decompose", decompose_query_node)
     workflow.add_node("tool", execute_tool_node)
     workflow.add_node("clarify", clarify_query_node)
-    workflow.add_node("synthesize", synthesize_response_placeholder_node)
+    workflow.add_node("synthesize", synthesize_response_node)
     
     # Define Entry Point
     workflow.set_entry_point("router")
