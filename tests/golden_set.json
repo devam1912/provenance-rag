@@ -1,0 +1,182 @@
+[
+  {
+    "query": "What GPA is required to remain in good academic standing?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["academic_standing.txt#chunk_0", "academic_standing.txt#chunk_1"],
+    "ground_truth": "To maintain good academic standing, undergraduate students must maintain a cumulative Grade Point Average (GPA) of 2.00 or higher."
+  },
+  {
+    "query": "How is a student placed on academic probation?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["academic_standing.txt#chunk_2"],
+    "ground_truth": "A student whose cumulative GPA falls below 2.00 will be placed on Academic Probation."
+  },
+  {
+    "query": "What happens if a student fails to raise their GPA while on probation?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["academic_standing.txt#chunk_3"],
+    "ground_truth": "If a student fails to raise their cumulative GPA to 2.00 or higher by the end of the probationary semester, they will be academically suspended."
+  },
+  {
+    "query": "How can a suspended student apply for reinstatement?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["academic_standing.txt#chunk_4"],
+    "ground_truth": "A suspended student must submit an appeal to the Academic Review Committee to apply for reinstatement. Reinstatement is not guaranteed."
+  },
+  {
+    "query": "What are the waiting periods for a first and second academic suspension?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["academic_standing.txt#chunk_4"],
+    "ground_truth": "For a first suspension, the waiting period is at least one calendar semester. For a second suspension, the waiting period is a minimum of two calendar years."
+  },
+  {
+    "query": "What are the requirements to make the Dean's List?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["academic_standing.txt#chunk_5"],
+    "ground_truth": "To qualify for the Dean's List, a student must achieve a term GPA of 3.50 or higher, complete at least 12 graded credit hours, and have no grades of F, I, or W."
+  },
+  {
+    "query": "How many total credits are required to graduate?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["graduation_requirements.txt#chunk_1"],
+    "ground_truth": "Students must complete a minimum of 120 semester credit hours to graduate."
+  },
+  {
+    "query": "What is the university's residency requirement for graduation?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["graduation_requirements.txt#chunk_1"],
+    "ground_truth": "Students must complete at least 30 credit hours in residency at the university to graduate."
+  },
+  {
+    "query": "How many upper-level course credits must a student complete to graduate?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["graduation_requirements.txt#chunk_2"],
+    "ground_truth": "Students must complete at least 36 credit hours of upper-level courses (300-level or 400-level)."
+  },
+  {
+    "query": "Can I transfer credits if I got a grade of D?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["transfer_credits.txt#chunk_1"],
+    "ground_truth": "No, courses with grades below a C- (such as D+, D, or F) are not eligible for transfer."
+  },
+  {
+    "query": "Do grades from transfer courses affect my cumulative GPA?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["transfer_credits.txt#chunk_3", "transfer_credits.txt#chunk_4"],
+    "ground_truth": "Grades earned in transfer courses are not calculated into the student's cumulative GPA at the university."
+  },
+  {
+    "query": "What types of courses are non-transferable?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["transfer_credits.txt#chunk_1"],
+    "ground_truth": "Vocational, technical, remedial, duplicate, and courses with grades below C- are non-transferable."
+  },
+  {
+    "query": "What is the maximum number of credits I can transfer from a community college?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["transfer_credits.txt#chunk_2"],
+    "ground_truth": "A maximum of 60 semester credit hours can be transferred from a community college."
+  },
+  {
+    "query": "What is the maximum total number of transfer credits allowed?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["transfer_credits.txt#chunk_2"],
+    "ground_truth": "A student can transfer a maximum of 90 semester credit hours in total toward their degree."
+  },
+  {
+    "query": "Can I transfer credits from a vocational course?",
+    "expected_route": "direct_retrieval",
+    "expected_chunks": ["transfer_credits.txt#chunk_1"],
+    "ground_truth": "No, courses that are vocational, technical, or remedial are not accepted for transfer credit."
+  },
+  {
+    "query": "What is the community college transfer cap and how do I return to good academic standing if suspended?",
+    "expected_route": "sub_questions",
+    "expected_chunks": ["transfer_credits.txt#chunk_2", "academic_standing.txt#chunk_4", "academic_standing.txt#chunk_3"],
+    "ground_truth": "The community college cap is 60 transfer credits. To return from suspension, you must appeal to the Academic Review Committee after a waiting period of one semester or two years. Good standing requires raising your cumulative GPA to 2.0."
+  },
+  {
+    "query": "What is the Dean's List GPA requirement and how many upper-level credits do I need to graduate?",
+    "expected_route": "sub_questions",
+    "expected_chunks": ["academic_standing.txt#chunk_5", "graduation_requirements.txt#chunk_2"],
+    "ground_truth": "To make the Dean's List, you need a 3.50 term GPA. To graduate, you need at least 36 credits of upper-level courses."
+  },
+  {
+    "query": "Are vocational courses transferable and do transfer grades count toward my GPA?",
+    "expected_route": "sub_questions",
+    "expected_chunks": ["transfer_credits.txt#chunk_1", "transfer_credits.txt#chunk_3"],
+    "ground_truth": "Vocational courses are non-transferable, and transfer course grades do not affect the university cumulative GPA."
+  },
+  {
+    "query": "How long is the waiting period after a first suspension and what GPA is required for the Dean's List?",
+    "expected_route": "sub_questions",
+    "expected_chunks": ["academic_standing.txt#chunk_4", "academic_standing.txt#chunk_5"],
+    "ground_truth": "The first suspension waiting period is one semester, and the Dean's List GPA requirement is a 3.50 term GPA."
+  },
+  {
+    "query": "What is the graduation residency requirement and does the transfer limit change for four-year colleges?",
+    "expected_route": "sub_questions",
+    "expected_chunks": ["graduation_requirements.txt#chunk_1", "transfer_credits.txt#chunk_2"],
+    "ground_truth": "The residency requirement requires at least 30 local credits. The transfer limit for four-year institutions is 90 credits (compared to 60 for community colleges)."
+  },
+  {
+    "query": "What happens on academic warning and can I transfer a course where I got a D+?",
+    "expected_route": "sub_questions",
+    "expected_chunks": ["academic_standing.txt#chunk_1", "transfer_credits.txt#chunk_1"],
+    "ground_truth": "Academic warning occurs when a student's term GPA is below 2.0 for the first time while cumulative GPA remains above 2.0. Courses with D+ are not transferable."
+  },
+  {
+    "query": "How many total credits are required for graduation and what is the maximum number of credits I can transfer?",
+    "expected_route": "sub_questions",
+    "expected_chunks": ["graduation_requirements.txt#chunk_1", "transfer_credits.txt#chunk_2"],
+    "ground_truth": "A total of 120 credit hours are required to graduate, and a maximum of 90 credit hours can be transferred in total."
+  },
+  {
+    "query": "I have a 1.8 GPA, 45 local credits, and 75 community college transfer credits. Can I graduate?",
+    "expected_route": "tool_call",
+    "expected_chunks": [],
+    "ground_truth": "No, because the cumulative GPA is 1.80 (below the required 2.00) and transfer credits are capped at 60 (leaving the credit total at 105, which is below the required 120)."
+  },
+  {
+    "query": "I have a GPA of 2.5, 35 local credits, and 50 four-year transfer credits. Can I graduate?",
+    "expected_route": "tool_call",
+    "expected_chunks": [],
+    "ground_truth": "No, because the total credits equal 85 (35 local + 50 transfer), which is below the required 120."
+  },
+  {
+    "query": "Check my graduation eligibility: GPA 3.2, local credits 20, cc transfer 80.",
+    "expected_route": "tool_call",
+    "expected_chunks": [],
+    "ground_truth": "No, because the local credits are 20 (below the residency requirement of 30) and the cc transfer credits are capped at 60 (giving a total of 80 credits, which is below the 120 credits required)."
+  },
+  {
+    "query": "I have 60 local credits, 40 community college transfer credits, and a 1.9 GPA. Can I graduate?",
+    "expected_route": "tool_call",
+    "expected_chunks": [],
+    "ground_truth": "No, because the GPA is 1.90 (below the required 2.00) and total credits are 100 (below the required 120)."
+  },
+  {
+    "query": "Calculate my graduation status: GPA 2.0, local credits 90, CC transfer credits 20, four-year transfer credits 10.",
+    "expected_route": "tool_call",
+    "expected_chunks": [],
+    "ground_truth": "Yes, because the GPA is 2.00 (meets requirement), local credits are 90 (meets residency), and total credits are 120 (meets threshold)."
+  },
+  {
+    "query": "probation rules",
+    "expected_route": "clarify",
+    "expected_chunks": [],
+    "ground_truth": "Please clarify what specific academic standing or probation rules you want to know about."
+  },
+  {
+    "query": "academic warning",
+    "expected_route": "clarify",
+    "expected_chunks": [],
+    "ground_truth": "Please clarify what specific academic warning rules or standing details you are interested in."
+  },
+  {
+    "query": "credit limit",
+    "expected_route": "clarify",
+    "expected_chunks": [],
+    "ground_truth": "Please clarify whether you are asking about transfer credit limits, semester credit caps, or graduation minimums."
+  }
+]
