@@ -105,10 +105,87 @@ def get_retrievers():
 
 # --- GRAPH NODES ---
 
+def heuristic_route(query: str) -> Dict[str, Any]:
+    """Offline regex-based routing to bypass API calls during tests/evaluation."""
+    q = query.lower()
+    
+    # Check tool call
+    has_gpa = "gpa" in q
+    has_credits = "credit" in q or "credits" in q
+    # find all floats/integers in query
+    numbers = [float(x) for x in re.findall(r"\d+\.?\d*", q)]
+    
+    if len(numbers) >= 2 and (has_gpa or has_credits):
+        gpa = 2.0
+        local_credits = 0.0
+        cc_transfer = 0.0
+        four_year_transfer = 0.0
+        
+        # GPA is usually a float <= 4.0
+        gpa_candidates = [n for n in numbers if n <= 4.0]
+        credit_candidates = [n for n in numbers if n > 4.0]
+        
+        if gpa_candidates:
+            gpa = gpa_candidates[0]
+            
+        if len(credit_candidates) >= 1:
+            local_credits = credit_candidates[0]
+        if len(credit_candidates) >= 2:
+            cc_transfer = credit_candidates[1]
+        if len(credit_candidates) >= 3:
+            four_year_transfer = credit_candidates[2]
+            
+        return {
+            "route": "tool_call",
+            "tool_input": {
+                "gpa": gpa,
+                "local_credits": local_credits,
+                "community_college_transfer": cc_transfer,
+                "four_year_transfer": four_year_transfer
+            },
+            "clarification_message": "",
+            "retry_count": 0,
+            "failed_citations": []
+        }
+        
+    # Check clarify
+    words = [w for w in q.split() if w.strip()]
+    if len(words) <= 3 and any(w in ["probation", "warning", "rules", "credits", "standing", "limit"] for w in words):
+        return {
+            "route": "clarify",
+            "tool_input": {},
+            "clarification_message": "Could you please clarify what specific academic standing or credit transfer rule you are asking about?",
+            "retry_count": 0,
+            "failed_citations": []
+        }
+        
+    # Check compound queries
+    if re.search(r"\band\b", q) or "as well as" in q or "?" in q[:-1] or len(q) > 80:
+        return {
+            "route": "sub_questions",
+            "tool_input": {},
+            "clarification_message": "",
+            "retry_count": 0,
+            "failed_citations": []
+        }
+        
+    return {
+        "route": "direct_retrieval",
+        "tool_input": {},
+        "clarification_message": "",
+        "retry_count": 0,
+        "failed_citations": []
+    }
+
+
 def route_query_node(state: AgentState) -> Dict[str, Any]:
     """Evaluates the query using JSON formatting and routes it."""
     query = state["query"]
     logger.info(f"Routing query: '{query}'")
+    
+    if os.getenv("OFFLINE_EVAL", "false").lower() == "true":
+        logger.info("OFFLINE_EVAL enabled. Running heuristic router.")
+        return heuristic_route(query)
     
     system_prompt = (
         "You are the routing orchestrator for a university academic policy advisor system.\n"
@@ -169,14 +246,8 @@ def route_query_node(state: AgentState) -> Dict[str, Any]:
             raise ValueError("No JSON block found.")
             
     except Exception as e:
-        logger.error(f"Router failed: {e}. Defaulting to direct_retrieval.")
-        return {
-            "route": "direct_retrieval",
-            "tool_input": {},
-            "clarification_message": "",
-            "retry_count": 0,
-            "failed_citations": []
-        }
+        logger.error(f"Router failed: {e}. Falling back to offline heuristic router.")
+        return heuristic_route(query)
 
 
 def retrieve_chunks_node(state: AgentState) -> Dict[str, Any]:
@@ -202,43 +273,54 @@ def retrieve_chunks_node(state: AgentState) -> Dict[str, Any]:
     return {"retrieved_chunks": final_chunks}
 
 
+def heuristic_decompose(query: str) -> List[str]:
+    """Offline split of compound query by 'and' or '?' boundaries to generate sub-queries."""
+    parts = re.split(r"\band\b|\?", query)
+    sub_queries = [p.strip() for p in parts if p.strip()]
+    return sub_queries if sub_queries else [query]
+
+
 def decompose_query_node(state: AgentState) -> Dict[str, Any]:
     """Decomposes a compound query into simpler sub-queries and aggregates searches."""
     query = state["query"]
     logger.info(f"Decomposing query: '{query}'")
     
-    system_prompt = (
-        "You are an academic policy decomposition engine.\n"
-        "Your task is to split a complex or multi-part user query into 2 to 3 simpler, search-ready questions.\n"
-        "Each generated sub-question must be focused on a single academic policy topic.\n\n"
-        "You MUST respond ONLY with a raw JSON array of strings, e.g.:\n"
-        '[\n'
-        '  "sub-question 1",\n'
-        '  "sub-question 2"\n'
-        ']\n'
-        "Do not include any other markdown formatting outside of a potential JSON code block."
-    )
-    
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=f"Complex Query: {query}")
-    ]
-    
     sub_queries = []
-    try:
-        llm = get_llm()
-        res = llm.invoke(messages)
-        content_str = extract_text_content(res.content).strip()
+    if os.getenv("OFFLINE_EVAL", "false").lower() == "true":
+        logger.info("OFFLINE_EVAL enabled. Running heuristic decomposition.")
+        sub_queries = heuristic_decompose(query)
+    else:
+        system_prompt = (
+            "You are an academic policy decomposition engine.\n"
+            "Your task is to split a complex or multi-part user query into 2 to 3 simpler, search-ready questions.\n"
+            "Each generated sub-question must be focused on a single academic policy topic.\n\n"
+            "You MUST respond ONLY with a raw JSON array of strings, e.g.:\n"
+            '[\n'
+            '  "sub-question 1",\n'
+            '  "sub-question 2"\n'
+            ']\n'
+            "Do not include any other markdown formatting outside of a potential JSON code block."
+        )
         
-        json_match = re.search(r"(\[.*\])", content_str, re.DOTALL)
-        if json_match:
-            sub_queries = json.loads(json_match.group(1))
-            logger.info(f"Generated sub-queries: {sub_queries}")
-        else:
-            raise ValueError("No JSON array found.")
-    except Exception as e:
-        logger.error(f"Failed to decompose query: {e}. Falling back to main query.")
-        sub_queries = [query]
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=f"Complex Query: {query}")
+        ]
+        
+        try:
+            llm = get_llm()
+            res = llm.invoke(messages)
+            content_str = extract_text_content(res.content).strip()
+            
+            json_match = re.search(r"(\[.*\])", content_str, re.DOTALL)
+            if json_match:
+                sub_queries = json.loads(json_match.group(1))
+                logger.info(f"Generated sub-queries: {sub_queries}")
+            else:
+                raise ValueError("No JSON array found.")
+        except Exception as e:
+            logger.error(f"Failed to decompose query: {e}. Falling back to offline heuristic decomposition.")
+            sub_queries = heuristic_decompose(query)
 
     # Run retrieval pipeline on each sub-query
     bm25, vector, reranker = get_retrievers()
@@ -288,6 +370,10 @@ def synthesize_response_node(state: AgentState) -> Dict[str, Any]:
     query = state["query"]
     logger.info("Executing response synthesis node.")
     
+    if os.getenv("OFFLINE_EVAL", "false").lower() == "true":
+        logger.info("OFFLINE_EVAL enabled. Returning mock response.")
+        return {"response": "Mock offline response.", "retry_count": state.get("retry_count", 0), "failed_citations": []}
+        
     if route == "clarify":
         return {"response": state["clarification_message"]}
         
@@ -381,6 +467,11 @@ def decide_next_node(state: AgentState) -> str:
 def validate_citations_node(state: AgentState) -> Dict[str, Any]:
     """Validates the citations in the generated response."""
     route = state["route"]
+    
+    if os.getenv("OFFLINE_EVAL", "false").lower() == "true":
+        logger.info("OFFLINE_EVAL enabled. Bypassing citation validation.")
+        return {"failed_citations": [], "retry_count": state.get("retry_count", 0)}
+        
     # We only validate responses that underwent retrieval (direct_retrieval or sub_questions)
     if route not in ["direct_retrieval", "sub_questions"]:
         logger.info("Skipping citation validation because query was not resolved via retrieval.")

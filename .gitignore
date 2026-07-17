@@ -27,3 +27,6 @@ env/
 
 # Scratch scripts
 scratch/
+
+# Evaluation reports
+eval/report.json
