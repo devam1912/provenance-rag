@@ -28,6 +28,9 @@ ENV PYTHONUNBUFFERED=1
 
 COPY . .
 
+# Pre-build search database indexes (BM25 & Chroma) during image build
+RUN PYTHONPATH=. EMBEDDING_PROVIDER=local python ingestion/ingest.py
+
 # Expose port
 EXPOSE 8000
 
