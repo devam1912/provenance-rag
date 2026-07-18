@@ -1,8 +1,15 @@
 import logging
+import os
+import re
+import time
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
+
+# Local imports
+from agent.graph import invoke_agent
 
 # Configure logging
 logging.basicConfig(
@@ -17,10 +24,10 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# CORS configuration
+# CORS middleware config
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,7 +36,7 @@ app.add_middleware(
 # Input/Output Schemas
 class QueryRequest(BaseModel):
     query: str = Field(..., description="The user's query or question.")
-    chat_history: Optional[List[Dict[str, str]]] = Field(
+    chat_history: Optional[List[Dict[str, Any]]] = Field(
         default=[],
         description="Previous message turn list, e.g. [{'role': 'user', 'content': '...'}]"
     )
@@ -37,11 +44,13 @@ class QueryRequest(BaseModel):
 class Citation(BaseModel):
     chunk_id: str = Field(..., description="ID of the cited text chunk (e.g. filename#idx).")
     text: str = Field(..., description="The matching excerpt from the chunk.")
-    score: Optional[float] = Field(None, description="The retrieval or relevance score.")
+    score: Optional[float] = Field(None, description="The relevance score.")
 
 class QueryResponse(BaseModel):
     query: str
     answer: str
+    route: str
+    decomposed_queries: List[str]
     citations: List[Citation]
     latency_ms: float
     total_cost: float = Field(0.0, description="Estimated API request cost in USD.")
@@ -54,15 +63,67 @@ async def health_check():
 
 @app.post("/query", response_model=QueryResponse)
 async def query_endpoint(request: QueryRequest):
-    """Placeholder endpoint for querying the Agentic RAG system."""
+    """Executes the Agentic RAG graph on the query request."""
     logger.info(f"Received query request: {request.query}")
-    # Placeholder return
+    
+    start_time = time.time()
+    try:
+        final_state = invoke_agent(request.query, chat_history=request.chat_history)
+    except Exception as e:
+        logger.error(f"Error handling query: {e}")
+        raise HTTPException(status_code=500, detail=f"Error executing agent RAG graph: {str(e)}")
+        
+    elapsed_ms = (time.time() - start_time) * 1000
+    
+    response_text = final_state.get("response", "")
+    retrieved_chunks = final_state.get("retrieved_chunks", [])
+    route = final_state.get("route", "direct_retrieval")
+    decomposed = final_state.get("current_sub_queries", [])
+    
+    # Parse citations out of the text response
+    citations = []
+    cited_ids = re.findall(r"\[([^\]]+#[^\]]+)\]", response_text)
+    
+    seen_ids = set()
+    dedup_cited_ids = []
+    for cid in cited_ids:
+        if cid not in seen_ids:
+            seen_ids.add(cid)
+            dedup_cited_ids.append(cid)
+            
+    # Map retrieved chunks by their ID
+    chunk_map = {c.chunk_id: c for c in retrieved_chunks}
+    for cid in dedup_cited_ids:
+        if cid in chunk_map:
+            citations.append(Citation(
+                chunk_id=cid,
+                text=chunk_map[cid].content
+            ))
+        else:
+            citations.append(Citation(
+                chunk_id=cid,
+                text="Reference content is unavailable."
+            ))
+            
+    # Approximate or retrieve log cost
+    cost = 0.0
+    # Telemetry logging writes to local jsonl which contains estimated cost, but for the API, 
+    # we can approximate it or return 0.0 for free Gemini tier.
+    
     return QueryResponse(
         query=request.query,
-        answer="This is a placeholder answer. Graph orchestration will be wired in Day 3.",
-        citations=[
-            Citation(chunk_id="academic_standing.txt#0", text="Placeholder cited text.", score=1.0)
-        ],
-        latency_ms=10.5,
-        total_cost=0.0
+        answer=response_text,
+        route=route,
+        decomposed_queries=decomposed,
+        citations=citations,
+        latency_ms=elapsed_ms,
+        total_cost=cost
     )
+
+# Serve static frontend files from /frontend mounting at root "/"
+frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
+if os.path.exists(frontend_dir):
+    logger.info(f"Mounting static files from {frontend_dir}")
+    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+else:
+    logger.warning(f"Frontend folder not found at {frontend_dir}. Static files mount skipped.")
