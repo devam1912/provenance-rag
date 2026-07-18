@@ -54,7 +54,7 @@ body {
     background: linear-gradient(180deg, rgba(13, 18, 30, 0.95) 0%, rgba(7, 10, 17, 0.98) 100%);
     border-right: 1px solid var(--border-glass);
     display: flex;
-    flex-direction: flex-col;
+    flex-direction: column;
     padding: 24px;
     flex-shrink: 0;
 }
