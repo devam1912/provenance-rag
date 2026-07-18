@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Provenance RAG - Academic Advisor Agent</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-icon">⚓</span>
+                    <span class="logo-text">Provenance <span class="accent-text">RAG</span></span>
+                </div>
+                <div class="subtitle">Academic Advisor Agent</div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <div class="section-title">Knowledge Bases</div>
+                <div class="doc-list">
+                    <div class="doc-item">
+                        <span class="doc-icon">📄</span>
+                        <div class="doc-details">
+                            <div class="doc-name">academic_standing.txt</div>
+                            <div class="doc-desc">GPA rules, Warning, Suspensions</div>
+                        </div>
+                    </div>
+                    <div class="doc-item">
+                        <span class="doc-icon">📄</span>
+                        <div class="doc-details">
+                            <div class="doc-name">graduation_requirements.txt</div>
+                            <div class="doc-desc">Residency, Upper-level credits</div>
+                        </div>
+                    </div>
+                    <div class="doc-item">
+                        <span class="doc-icon">📄</span>
+                        <div class="doc-details">
+                            <div class="doc-name">transfer_credits.txt</div>
+                            <div class="doc-desc">C- grades, CC cap limit, GPA policy</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-title">System Status</div>
+                <div class="status-panel">
+                    <div class="status-row">
+                        <span class="status-lbl">Backend Server</span>
+                        <span class="status-val success" id="server-status">Connecting...</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-lbl">Orchestration</span>
+                        <span class="status-val highlight">LangGraph</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-lbl">Sparse Index</span>
+                        <span class="status-val">BM25</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-lbl">Dense Embeddings</span>
+                        <span class="status-val">MiniLM-L6 (Local)</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-lbl">Reranker Model</span>
+                        <span class="status-val">BGE-Reranker (Local)</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-lbl">LLM Judge</span>
+                        <span class="status-val">Gemini 3.5 Flash</span>
+                    </div>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="footer-lbl">Offline CI Regression Gate</div>
+                <div class="footer-val">ACTIVE (100% Passed)</div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-area">
+            <header class="chat-header">
+                <div class="header-info">
+                    <h1>Academic Advisor Agent</h1>
+                    <p>Ask about GPA guidelines, graduation requirements, credit transfers, and academic standings.</p>
+                </div>
+            </header>
+
+            <!-- Chat Message List -->
+            <section class="messages-container" id="chat-messages">
+                <div class="message system-message">
+                    <div class="message-content">
+                        <strong>Hello! I am your University Academic Policy Advisor.</strong>
+                        <p>I can help answer complex questions about graduation, transfer credit policies, and GPA warning guidelines. Every answer I generate is strictly verified and cited directly from our reference policy chunks.</p>
+                        <div class="quick-suggestions">
+                            <button class="suggest-btn" data-query="What GPA is required to remain in good academic standing?">What GPA is required for Good Standing?</button>
+                            <button class="suggest-btn" data-query="What is the community college transfer cap and how do I return to good academic standing if suspended?">CC transfer cap & return from suspension?</button>
+                            <button class="suggest-btn" data-query="I have a 1.8 GPA, 45 local credits, and 75 community college transfer credits. Can I graduate?">Graduation audit check</button>
+                            <button class="suggest-btn" data-query="probation rules">Probation clarification</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Execution Steps Progress Timeline -->
+            <div class="progress-timeline" id="progress-timeline">
+                <div class="timeline-header">
+                    <div class="spinner"></div>
+                    <span id="timeline-status-text">Agent Routing query...</span>
+                </div>
+                <div class="timeline-steps">
+                    <div class="step" id="step-router"><span class="step-dot"></span>Router Node</div>
+                    <div class="step" id="step-retrieve"><span class="step-dot"></span>Retrieve & Rerank</div>
+                    <div class="step" id="step-tool"><span class="step-dot"></span>Audit Tool (if metrics)</div>
+                    <div class="step" id="step-synthesize"><span class="step-dot"></span>Gemini Synthesis</div>
+                    <div class="step" id="step-validate"><span class="step-dot"></span>Citation NLI Validator</div>
+                </div>
+            </div>
+
+            <!-- Input Form Bar -->
+            <footer class="chat-footer">
+                <form id="chat-form" class="input-form">
+                    <input type="text" id="query-input" placeholder="Type your academic query here (e.g. Can I transfer a D grade?)..." required autocomplete="off">
+                    <button type="submit" class="send-btn">
+                        <span class="btn-text">Send Query</span>
+                        <span class="btn-icon">➔</span>
+                    </button>
+                </form>
+            </footer>
+        </main>
+
+        <!-- Glassmorphism Citation Inspector Drawer -->
+        <aside class="citation-drawer" id="citation-drawer">
+            <div class="drawer-header">
+                <h2>Source Citation Inspector</h2>
+                <button class="close-btn" id="close-drawer-btn">&times;</button>
+            </div>
+            <div class="drawer-content">
+                <div class="citation-meta">
+                    <div class="meta-item">
+                        <span class="meta-lbl">Chunk Reference:</span>
+                        <span class="meta-val highlight" id="inspect-chunk-id">transfer_credits.txt#chunk_2</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-lbl">Source Document:</span>
+                        <span class="meta-val" id="inspect-doc-name">transfer_credits.txt</span>
+                    </div>
+                </div>
+                
+                <div class="citation-verdict-banner">
+                    <div class="verdict-icon">🛡️</div>
+                    <div class="verdict-text">
+                        <strong>NLI Entailment Verified</strong>
+                        <div>Logical validator confirmed the claim is fully supported by the excerpt below.</div>
+                    </div>
+                </div>
+
+                <div class="section-title">Raw Document Excerpt</div>
+                <div class="excerpt-box">
+                    <pre><code id="inspect-excerpt-text">Loading excerpt...</code></pre>
+                </div>
+            </div>
+        </aside>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
