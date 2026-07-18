@@ -97,7 +97,7 @@ async def query_endpoint(request: QueryRequest):
         if cid in chunk_map:
             citations.append(Citation(
                 chunk_id=cid,
-                text=chunk_map[cid].content
+                text=chunk_map[cid].text
             ))
         else:
             citations.append(Citation(

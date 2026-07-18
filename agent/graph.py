@@ -689,7 +689,7 @@ def invoke_agent(query: str, chat_history: List[Dict[str, Any]] = None, config: 
         chunk_words = 0
         if not offline_eval:
             for chunk in final_state.get("retrieved_chunks", []):
-                chunk_words += len(chunk.content.split())
+                chunk_words += len(chunk.text.split())
                 
         input_tokens = int(input_words * 1.33 + chunk_words * 1.33 + 500)
         output_tokens = int(output_words * 1.33)
