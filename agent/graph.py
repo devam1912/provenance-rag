@@ -2,6 +2,7 @@ import os
 import json
 import re
 import logging
+import time
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 
@@ -40,33 +41,62 @@ def extract_text_content(content: Any) -> str:
 
 
 def get_llm():
-    """Initializes the Gemini model with a 30s timeout to avoid indefinite hanging."""
+    """Initializes the LLM with timeouts, max_retries, and fallback options."""
     provider = os.getenv("LLM_PROVIDER", "google").lower()
     model_name = os.getenv("LLM_MODEL", "gemini-3.5-flash")
+    timeout = float(os.getenv("LLM_TIMEOUT", "10.0"))
+    max_retries = int(os.getenv("LLM_MAX_RETRIES", "3"))
     
     if provider == "google":
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY is required when LLM_PROVIDER=google.")
-        return ChatGoogleGenerativeAI(
+        
+        primary_llm = ChatGoogleGenerativeAI(
             model=model_name,
             temperature=0.0,
             google_api_key=api_key,
-            timeout=30.0  # Safe request timeout
+            timeout=timeout,
+            max_retries=max_retries
         )
+        
+        fallback_model = os.getenv("LLM_FALLBACK_MODEL", "gemini-1.5-flash")
+        if fallback_model != model_name:
+            fallback_llm = ChatGoogleGenerativeAI(
+                model=fallback_model,
+                temperature=0.0,
+                google_api_key=api_key,
+                timeout=timeout,
+                max_retries=max_retries
+            )
+            return primary_llm.with_fallbacks([fallback_llm])
+            
+        return primary_llm
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
+        primary_llm = ChatOpenAI(
             model=model_name,
             temperature=0.0,
-            timeout=30.0
+            timeout=timeout,
+            max_retries=max_retries
         )
+        fallback_model = os.getenv("LLM_FALLBACK_MODEL", "gpt-4o-mini")
+        if fallback_model != model_name:
+            fallback_llm = ChatOpenAI(
+                model=fallback_model,
+                temperature=0.0,
+                timeout=timeout,
+                max_retries=max_retries
+            )
+            return primary_llm.with_fallbacks([fallback_llm])
+        return primary_llm
     else:
         logger.warning(f"Unsupported LLM provider '{provider}'. Falling back to Google Gemini.")
         return ChatGoogleGenerativeAI(
             model="gemini-3.5-flash",
             temperature=0.0,
-            timeout=30.0
+            timeout=timeout,
+            max_retries=max_retries
         )
 
 
@@ -589,3 +619,117 @@ def create_agent_graph() -> StateGraph:
 
 # Global compiled graph instance
 agent_graph = create_agent_graph()
+
+
+def get_langfuse_callback():
+    """Initializes the Langfuse callback handler if keys are set in environment."""
+    public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
+    secret_key = os.getenv("LANGFUSE_SECRET_KEY")
+    host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    
+    if public_key and secret_key:
+        try:
+            from langfuse.callback import CallbackHandler
+            logger.info("Initializing Langfuse CallbackHandler for graph tracing...")
+            return CallbackHandler(
+                public_key=public_key,
+                secret_key=secret_key,
+                host=host
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize Langfuse callback handler: {e}")
+    return None
+
+
+def invoke_agent(query: str, chat_history: List[Dict[str, Any]] = None, config: Dict[str, Any] = None) -> Dict[str, Any]:
+    """Wraps agent graph invocation, logs telemetry locally, and routes traces to Langfuse."""
+    if chat_history is None:
+        chat_history = []
+    if config is None:
+        config = {}
+        
+    # Wire Langfuse callback if available
+    callbacks = config.get("callbacks", [])
+    lf_callback = get_langfuse_callback()
+    if lf_callback:
+        callbacks.append(lf_callback)
+    config["callbacks"] = callbacks
+    
+    initial_state = {
+        "query": query,
+        "chat_history": chat_history,
+        "route": "",
+        "current_sub_queries": [],
+        "retrieved_chunks": [],
+        "tool_input": {},
+        "tool_output": "",
+        "clarification_message": "",
+        "response": "",
+        "retry_count": 0,
+        "failed_citations": []
+    }
+    
+    start_time = time.time()
+    status = "SUCCESS"
+    try:
+        final_state = agent_graph.invoke(initial_state, config=config)
+    except Exception as e:
+        status = "ERROR"
+        logger.error(f"Agent invocation failed: {e}")
+        raise e
+    finally:
+        elapsed = time.time() - start_time
+        
+        offline_eval = os.getenv("OFFLINE_EVAL", "false").lower() == "true"
+        
+        # Estimate tokens programmatically for local reporting
+        input_words = len(query.split())
+        output_words = len(final_state.get("response", "").split())
+        
+        chunk_words = 0
+        if not offline_eval:
+            for chunk in final_state.get("retrieved_chunks", []):
+                chunk_words += len(chunk.content.split())
+                
+        input_tokens = int(input_words * 1.33 + chunk_words * 1.33 + 500)
+        output_tokens = int(output_words * 1.33)
+        
+        # Count approximate LLM invocations based on route
+        calls_count = 1
+        route = final_state.get("route", "")
+        if route == "sub_questions" and not offline_eval:
+            calls_count += 1
+        if route in ["direct_retrieval", "sub_questions"] and not offline_eval:
+            retry_count = final_state.get("retry_count", 0)
+            calls_count += (retry_count + 1) * 2
+            
+        total_input_tokens = input_tokens * calls_count
+        total_output_tokens = output_tokens * (final_state.get("retry_count", 0) + 1)
+        
+        # Est cost based on Gemini 1.5 Flash tier rates
+        cost = 0.0
+        if not offline_eval:
+            cost = ((total_input_tokens / 1_000_000) * 0.075) + ((total_output_tokens / 1_000_000) * 0.30)
+            
+        telemetry_entry = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "query": query,
+            "route": route,
+            "latency_seconds": elapsed,
+            "tokens_used": total_input_tokens + total_output_tokens,
+            "estimated_cost_usd": cost,
+            "status": status,
+            "retrieved_chunks_count": len(final_state.get("retrieved_chunks", [])),
+            "failed_citations_count": len(final_state.get("failed_citations", [])),
+            "retry_count": final_state.get("retry_count", 0),
+            "offline_eval": offline_eval
+        }
+        
+        try:
+            os.makedirs("data", exist_ok=True)
+            with open("data/telemetry.jsonl", "a") as f:
+                f.write(json.dumps(telemetry_entry) + "\n")
+        except Exception as logger_err:
+            logger.error(f"Failed to write local telemetry: {logger_err}")
+            
+    return final_state

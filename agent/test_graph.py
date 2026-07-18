@@ -11,29 +11,16 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
 
-from agent.graph import agent_graph
+from agent.graph import invoke_agent
 
 def run_test_query(query: str) -> None:
     print("\n" + "=" * 80)
     print(f"TEST QUERY: '{query}'")
     print("=" * 80)
     
-    # Initialize state
-    initial_state = {
-        "query": query,
-        "chat_history": [],
-        "route": "",
-        "current_sub_queries": [],
-        "retrieved_chunks": [],
-        "tool_input": {},
-        "tool_output": "",
-        "clarification_message": "",
-        "response": ""
-    }
-    
     try:
-        # Run graph
-        final_state = agent_graph.invoke(initial_state)
+        # Run graph wrapper
+        final_state = invoke_agent(query, chat_history=[])
         
         # Display results
         print("\n--- STATE EXECUTION RESULTS ---")

@@ -11,7 +11,7 @@ os.environ["OFFLINE_EVAL"] = "true"
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-from agent.graph import agent_graph
+from agent.graph import invoke_agent
 
 def run_evaluation() -> None:
     print("=" * 80)
@@ -62,8 +62,8 @@ def run_evaluation() -> None:
         }
         
         start_time = time.time()
-        # Invoke LangGraph workflow
-        final_state = agent_graph.invoke(initial_state)
+        # Invoke LangGraph workflow wrapper
+        final_state = invoke_agent(query, chat_history=[])
         elapsed = time.time() - start_time
         
         actual_route = final_state["route"]

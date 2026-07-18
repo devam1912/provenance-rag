@@ -30,3 +30,6 @@ scratch/
 
 # Evaluation reports
 eval/report.json
+
+# Telemetry logs
+data/telemetry.jsonl
