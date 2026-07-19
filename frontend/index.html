@@ -24,7 +24,15 @@
             
             <nav class="sidebar-nav">
                 <div class="section-title">Knowledge Bases</div>
-                <div class="doc-list">
+                
+                <input type="file" id="pdf-upload-input" accept=".pdf,.txt,.md" style="display: none;">
+                <button id="upload-doc-btn" class="suggest-btn" style="width: 100%; border: 1px dashed var(--accent); margin-bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; padding: 10px;">
+                    <span>➕</span> Upload Policy (.pdf/.txt)
+                </button>
+                <div id="upload-status" style="font-size: 11px; margin-top: -6px; margin-bottom: 12px; color: var(--text-secondary); display: none; font-weight: 500;"></div>
+
+                <div class="doc-list" id="doc-list">
+                    <!-- Loaded dynamically via api, default seed backups shown below -->
                     <div class="doc-item">
                         <span class="doc-icon">📄</span>
                         <div class="doc-details">
