@@ -46,10 +46,13 @@ class VectorRetriever:
             return
 
         texts = [chunk.text for chunk in chunks]
-        metadatas = [chunk.to_dict()["metadata"] for chunk in chunks]
-        # Store the chunk_id explicitly in metadata so we can map it back
-        for i, meta in enumerate(metadatas):
-            meta["chunk_id"] = chunks[i].chunk_id
+        metadatas = []
+        for chunk in chunks:
+            meta = chunk.to_dict()["metadata"].copy()
+            # Convert list of headers to flat string for database compatibility
+            meta["headers"] = " > ".join(meta["headers"]) if isinstance(meta["headers"], list) else str(meta["headers"] or "")
+            meta["chunk_id"] = chunk.chunk_id
+            metadatas.append(meta)
 
         # Re-initialize/create new collection
         self.db = Chroma.from_texts(
@@ -92,12 +95,21 @@ class VectorRetriever:
         retrieved_pairs = []
         for doc, score in results:
             chunk_id = doc.metadata.get("chunk_id", "unknown_id")
+            
+            # Map headers back to a list of strings
+            headers_val = doc.metadata.get("headers", "")
+            headers_list = []
+            if isinstance(headers_val, str):
+                headers_list = [h.strip() for h in headers_val.split(" > ") if h.strip()]
+            elif isinstance(headers_val, list):
+                headers_list = headers_val
+                
             # Map back to PolicyChunk object
             chunk = PolicyChunk(
                 chunk_id=chunk_id,
                 text=doc.page_content,
                 source=doc.metadata.get("source", ""),
-                headers=doc.metadata.get("headers", []),
+                headers=headers_list,
                 chunk_index=doc.metadata.get("chunk_index", 0)
             )
             retrieved_pairs.append((chunk, float(score)))
