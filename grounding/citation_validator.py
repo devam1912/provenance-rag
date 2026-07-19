@@ -12,6 +12,10 @@ def get_cited_sentence(text: str, match_start: int) -> str:
     while start > 0:
         # Check if previous character is a boundary
         if text[start - 1] in boundaries:
+            # Skip if it is a decimal point inside a number (e.g. 2.00 or 3.5)
+            if text[start - 1] == "." and start < len(text) and text[start].isdigit() and start > 1 and text[start - 2].isdigit():
+                start -= 1
+                continue
             break
         start -= 1
     
