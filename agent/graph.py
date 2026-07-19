@@ -133,6 +133,14 @@ def get_retrievers():
     return _bm25, _vector, _reranker
 
 
+def reload_retrievers():
+    """Resets the BM25 and Vector retriever singletons to load newly created index files."""
+    global _bm25, _vector
+    _bm25 = None
+    _vector = None
+    logger.info("Cleared BM25 and Vector retriever singletons for reloading.")
+
+
 # --- GRAPH NODES ---
 
 def heuristic_route(query: str) -> Dict[str, Any]:
