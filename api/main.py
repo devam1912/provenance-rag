@@ -43,6 +43,10 @@ class QueryRequest(BaseModel):
         default=[],
         description="Previous message turn list, e.g. [{'role': 'user', 'content': '...'}]"
     )
+    filter_document: Optional[str] = Field(
+        default=None,
+        description="Optional filename to restrict retrieval strictly to one document."
+    )
 
 class Citation(BaseModel):
     chunk_id: str = Field(..., description="ID of the cited text chunk (e.g. filename#idx).")
@@ -71,7 +75,11 @@ async def query_endpoint(request: QueryRequest):
     
     start_time = time.time()
     try:
-        final_state = invoke_agent(request.query, chat_history=request.chat_history)
+        final_state = invoke_agent(
+            request.query, 
+            chat_history=request.chat_history,
+            filter_document=request.filter_document
+        )
     except Exception as e:
         logger.error(f"Error handling query: {e}")
         raise HTTPException(status_code=500, detail=f"Error executing agent RAG graph: {str(e)}")

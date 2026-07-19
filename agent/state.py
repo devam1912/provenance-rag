@@ -27,3 +27,4 @@ class AgentState(TypedDict):
     response: str
     retry_count: int
     failed_citations: List[str]
+    filter_document: Optional[str]

@@ -93,10 +93,14 @@
 
         <!-- Main Chat Area -->
         <main class="chat-area">
-            <header class="chat-header">
+            <header class="chat-header" style="display: flex; justify-content: space-between; align-items: center; gap: 20px;">
                 <div class="header-info">
                     <h1>Academic Advisor Agent</h1>
                     <p>Ask about GPA guidelines, graduation requirements, credit transfers, and academic standings.</p>
+                </div>
+                <div id="active-filter-container" style="display: none; background: rgba(99, 102, 241, 0.1); border: 1px solid var(--border-glass-active); border-radius: var(--radius-lg); padding: 8px 16px; font-size: 12px; font-weight: 600; color: #818cf8; align-items: center; gap: 8px; flex-shrink: 0;">
+                    <span>🔍 File: <span id="active-filter-name">None</span></span>
+                    <span id="clear-filter-btn" style="cursor: pointer; font-size: 16px; line-height: 1; padding: 2px; color: var(--text-secondary); font-weight: bold; margin-left: 4px;" title="Clear Filter">×</span>
                 </div>
             </header>
 

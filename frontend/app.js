@@ -19,10 +19,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const uploadStatus = document.getElementById("upload-status");
     const docListContainer = document.getElementById("doc-list");
 
+    // Filter elements
+    const activeFilterContainer = document.getElementById("active-filter-container");
+    const activeFilterName = document.getElementById("active-filter-name");
+    const clearFilterBtn = document.getElementById("clear-filter-btn");
+
     // Local state
     let chatHistory = [];
     let currentCitationsMap = {}; // Maps chunk_id -> raw content text
     let timelineTimers = [];
+    let selectedDocument = null;
 
     // Fetch and render knowledge base documents
     async function loadDocuments() {
@@ -54,6 +60,15 @@ document.addEventListener("DOMContentLoaded", () => {
                             <div class="doc-desc">${description}</div>
                         </div>
                     `;
+                    
+                    if (selectedDocument === doc.name) {
+                        docItem.classList.add("active");
+                    }
+                    
+                    docItem.addEventListener("click", () => {
+                        toggleDocumentFilter(doc.name, docItem);
+                    });
+                    
                     docListContainer.appendChild(docItem);
                 });
             }
@@ -61,6 +76,32 @@ document.addEventListener("DOMContentLoaded", () => {
             console.error("Error loading document catalog:", err);
         }
     }
+
+    function toggleDocumentFilter(docName, element) {
+        const isActive = element.classList.contains("active");
+        
+        document.querySelectorAll(".doc-item").forEach(item => {
+            item.classList.remove("active");
+        });
+
+        if (isActive) {
+            selectedDocument = null;
+            activeFilterContainer.style.display = "none";
+        } else {
+            selectedDocument = docName;
+            element.classList.add("active");
+            activeFilterName.textContent = docName;
+            activeFilterContainer.style.display = "flex";
+        }
+    }
+
+    clearFilterBtn.addEventListener("click", () => {
+        selectedDocument = null;
+        activeFilterContainer.style.display = "none";
+        document.querySelectorAll(".doc-item").forEach(item => {
+            item.classList.remove("active");
+        });
+    });
 
     // Trigger hidden file selection
     uploadDocBtn.addEventListener("click", () => {
@@ -171,7 +212,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     query: query,
-                    chat_history: chatHistory
+                    chat_history: chatHistory,
+                    filter_document: selectedDocument
                 })
             });
 
