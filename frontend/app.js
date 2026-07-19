@@ -13,10 +13,101 @@ document.addEventListener("DOMContentLoaded", () => {
     const inspectDocName = document.getElementById("inspect-doc-name");
     const inspectExcerptText = document.getElementById("inspect-excerpt-text");
 
+    // Dynamic Upload elements
+    const pdfUploadInput = document.getElementById("pdf-upload-input");
+    const uploadDocBtn = document.getElementById("upload-doc-btn");
+    const uploadStatus = document.getElementById("upload-status");
+    const docListContainer = document.getElementById("doc-list");
+
     // Local state
     let chatHistory = [];
     let currentCitationsMap = {}; // Maps chunk_id -> raw content text
     let timelineTimers = [];
+
+    // Fetch and render knowledge base documents
+    async function loadDocuments() {
+        try {
+            const res = await fetch("/api/documents");
+            if (!res.ok) throw new Error("Failed to load documents");
+            const docs = await res.json();
+            
+            if (docs && docs.length > 0) {
+                docListContainer.innerHTML = "";
+                docs.forEach(doc => {
+                    const sizeKb = (doc.size_bytes / 1024).toFixed(1);
+                    const docItem = document.createElement("div");
+                    docItem.className = "doc-item";
+                    
+                    let description = `Size: ${sizeKb} KB`;
+                    if (doc.name === "academic_standing.txt") {
+                        description = "GPA rules, Warning, Suspensions";
+                    } else if (doc.name === "graduation_requirements.txt") {
+                        description = "Residency, Upper-level credits";
+                    } else if (doc.name === "transfer_credits.txt") {
+                        description = "C- grades, CC cap limit, GPA policy";
+                    }
+                    
+                    docItem.innerHTML = `
+                        <span class="doc-icon">📄</span>
+                        <div class="doc-details">
+                            <div class="doc-name">${doc.name}</div>
+                            <div class="doc-desc">${description}</div>
+                        </div>
+                    `;
+                    docListContainer.appendChild(docItem);
+                });
+            }
+        } catch (err) {
+            console.error("Error loading document catalog:", err);
+        }
+    }
+
+    // Trigger hidden file selection
+    uploadDocBtn.addEventListener("click", () => {
+        pdfUploadInput.click();
+    });
+
+    // Handle file upload
+    pdfUploadInput.addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        uploadStatus.style.display = "block";
+        uploadStatus.style.color = "var(--text-secondary)";
+        uploadStatus.textContent = "Uploading & extracting text...";
+        uploadDocBtn.disabled = true;
+
+        try {
+            const res = await fetch("/api/upload", {
+                method: "POST",
+                body: formData
+            });
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.detail || "Failed to process document");
+            }
+
+            uploadStatus.style.color = "var(--teal)";
+            uploadStatus.textContent = "Document indexed successfully!";
+            
+            setTimeout(() => {
+                uploadStatus.style.display = "none";
+                pdfUploadInput.value = "";
+                loadDocuments();
+            }, 1800);
+
+        } catch (err) {
+            console.error("File upload error:", err);
+            uploadStatus.style.color = "#f87171"; 
+            uploadStatus.textContent = `Error: ${err.message || "Failed to process document."}`;
+        } finally {
+            uploadDocBtn.disabled = false;
+        }
+    });
 
     // Check Backend Health
     async function checkHealth() {
@@ -36,6 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     checkHealth();
+    loadDocuments();
     // Poll health check every 15s
     setInterval(checkHealth, 15000);
 
