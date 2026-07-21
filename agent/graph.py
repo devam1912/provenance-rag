@@ -43,7 +43,18 @@ def extract_text_content(content: Any) -> str:
 def get_llm():
     """Initializes the LLM with timeouts, max_retries, and fallback options."""
     provider = os.getenv("LLM_PROVIDER", "google").lower()
-    model_name = os.getenv("LLM_MODEL", "gemini-3.5-flash")
+    model_name = os.getenv("LLM_MODEL")
+    if not model_name:
+        if provider == "google":
+            model_name = "gemini-3.5-flash"
+        elif provider == "mistral":
+            model_name = "mistral-large-latest"
+        else:
+            model_name = "gpt-4o-mini"
+            
+    if provider == "mistral" and ("gemini" in model_name or not model_name):
+        model_name = "mistral-large-latest"
+        
     timeout = float(os.getenv("LLM_TIMEOUT", "10.0"))
     max_retries = int(os.getenv("LLM_MAX_RETRIES", "3"))
     
@@ -85,6 +96,31 @@ def get_llm():
             fallback_llm = ChatOpenAI(
                 model=fallback_model,
                 temperature=0.0,
+                timeout=timeout,
+                max_retries=max_retries
+            )
+            return primary_llm.with_fallbacks([fallback_llm])
+        return primary_llm
+    elif provider == "mistral":
+        from langchain_openai import ChatOpenAI
+        api_key = os.getenv("MISTRAL_API_KEY")
+        if not api_key:
+            raise ValueError("MISTRAL_API_KEY is required when LLM_PROVIDER=mistral.")
+        primary_llm = ChatOpenAI(
+            model=model_name,
+            temperature=0.0,
+            openai_api_key=api_key,
+            openai_api_base="https://api.mistral.ai/v1",
+            timeout=timeout,
+            max_retries=max_retries
+        )
+        fallback_model = os.getenv("LLM_FALLBACK_MODEL", "mistral-large-latest")
+        if fallback_model != model_name:
+            fallback_llm = ChatOpenAI(
+                model=fallback_model,
+                temperature=0.0,
+                openai_api_key=api_key,
+                openai_api_base="https://api.mistral.ai/v1",
                 timeout=timeout,
                 max_retries=max_retries
             )
