@@ -294,10 +294,11 @@ def retrieve_chunks_node(state: AgentState) -> Dict[str, Any]:
     logger.info(f"Executing direct retrieval for query: '{query}'")
     
     bm25, vector, reranker = get_retrievers()
+    filter_doc = state.get("filter_document")
     
-    # Run sparse and dense channels
-    sparse_res = bm25.retrieve(query, top_k=30)
-    dense_res = vector.retrieve(query, top_k=30)
+    # Run sparse and dense channels passing the filter parameter directly to retrievers
+    sparse_res = bm25.retrieve(query, top_k=30, filter_document=filter_doc)
+    dense_res = vector.retrieve(query, top_k=30, filter_document=filter_doc)
     
     # RRF Fusion
     fused = reciprocal_rank_fusion(sparse_res, dense_res, k=60)
@@ -364,18 +365,16 @@ def decompose_query_node(state: AgentState) -> Dict[str, Any]:
     bm25, vector, reranker = get_retrievers()
     aggregated_chunks: List[Any] = []
     seen_ids = set()
+    filter_doc = state.get("filter_document")
     
     for sub_q in sub_queries:
         logger.info(f"Retrieving sub-query: '{sub_q}'")
-        sparse_res = bm25.retrieve(sub_q, top_k=15)
-        dense_res = vector.retrieve(sub_q, top_k=15)
+        sparse_res = bm25.retrieve(sub_q, top_k=15, filter_document=filter_doc)
+        dense_res = vector.retrieve(sub_q, top_k=15, filter_document=filter_doc)
         
-        fused = reciprocal_rank_fusion(sparse_res, dense_res, k=60)
-        candidate_chunks = [chunk for chunk, _ in fused]
-        
-        reranked = reranker.rerank(sub_q, candidate_chunks, top_k=3)
-        
-        for chunk, _ in reranked:
+        # RRF Fusion
+        fused = reciprocal_rank_fusion(sparse_res, dense_res, k=30)
+        for chunk, _ in fused:
             if chunk.chunk_id not in seen_ids:
                 seen_ids.add(chunk.chunk_id)
                 aggregated_chunks.append(chunk)
@@ -397,9 +396,9 @@ def execute_tool_node(state: AgentState) -> Dict[str, Any]:
 
 
 def clarify_query_node(state: AgentState) -> Dict[str, Any]:
-    """Empty pass-through clarify node setting state details."""
+    """Clarify node setting the clarification response."""
     logger.info("Directing user to clarify query node.")
-    return {}
+    return {"response": state.get("clarification_message", "Could you please clarify your question?")}
 
 
 def synthesize_response_node(state: AgentState) -> Dict[str, Any]:
@@ -649,7 +648,7 @@ def get_langfuse_callback():
     return None
 
 
-def invoke_agent(query: str, chat_history: List[Dict[str, Any]] = None, config: Dict[str, Any] = None) -> Dict[str, Any]:
+def invoke_agent(query: str, chat_history: List[Dict[str, Any]] = None, config: Dict[str, Any] = None, filter_document: Optional[str] = None) -> Dict[str, Any]:
     """Wraps agent graph invocation, logs telemetry locally, and routes traces to Langfuse."""
     if chat_history is None:
         chat_history = []
@@ -674,7 +673,8 @@ def invoke_agent(query: str, chat_history: List[Dict[str, Any]] = None, config: 
         "clarification_message": "",
         "response": "",
         "retry_count": 0,
-        "failed_citations": []
+        "failed_citations": [],
+        "filter_document": filter_document
     }
     
     start_time = time.time()

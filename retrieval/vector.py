@@ -76,7 +76,7 @@ class VectorRetriever:
         )
         logger.info(f"Loaded existing vector database from {self.db_dir}.")
 
-    def retrieve(self, query: str, top_k: int = 5) -> List[Tuple[PolicyChunk, float]]:
+    def retrieve(self, query: str, top_k: int = 5, filter_document: Optional[str] = None) -> List[Tuple[PolicyChunk, float]]:
         """Retrieves top_k chunks matching the query using similarity search with score."""
         if self.db is None:
             # Try to load if not initialized
@@ -90,7 +90,8 @@ class VectorRetriever:
         # Note: Chroma distance scoring can be L2 or cosine. cosine returns 0 to 1 range typically.
         # similarity_search_with_score returns (Document, distance) where distance is L2 (lower is closer).
         # We use similarity_search_with_score for robustness, lower score means more similar for default Chroma (L2).
-        results = self.db.similarity_search_with_score(query, k=top_k)
+        filter_dict = {"source": filter_document} if filter_document else None
+        results = self.db.similarity_search_with_score(query, k=top_k, filter=filter_dict)
         
         retrieved_pairs = []
         for doc, score in results:

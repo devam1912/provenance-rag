@@ -2,7 +2,7 @@ import os
 import pickle
 import re
 import logging
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from rank_bm25 import BM25Okapi
 from ingestion.chunker import PolicyChunk
 
@@ -80,7 +80,7 @@ class BM25Retriever:
         self.bm25 = data.get("bm25_instance")
         logger.info(f"Loaded BM25 index with {len(self.chunks)} chunks from {filepath}")
 
-    def retrieve(self, query: str, top_k: int = 5) -> List[Tuple[PolicyChunk, float]]:
+    def retrieve(self, query: str, top_k: int = 5, filter_document: Optional[str] = None) -> List[Tuple[PolicyChunk, float]]:
         """Retrieves top_k chunks matching the query, with their score."""
         if self.bm25 is None:
             logger.warning("BM25 index is not initialized. Returning empty list.")
@@ -92,6 +92,11 @@ class BM25Retriever:
         
         # Pair chunk, score
         pairs = list(zip(self.chunks, scores))
+        
+        # Filter down to specific source document if filter is active
+        if filter_document:
+            pairs = [p for p in pairs if p[0].source == filter_document]
+            
         # Sort descending by score
         pairs.sort(key=lambda x: x[1], reverse=True)
         
