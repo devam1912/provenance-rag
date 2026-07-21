@@ -214,10 +214,21 @@ async def upload_document(file: UploadFile = File(...)):
     return {"status": "success", "message": f"File {filename} uploaded, parsed, and indexed successfully."}
 
 
+class NoCacheStaticFiles(StaticFiles):
+    def is_not_modified(self, response_headers, request_headers) -> bool:
+        return False
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+
 # Serve static frontend files from /frontend mounting at root "/"
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend"))
 if os.path.exists(frontend_dir):
     logger.info(f"Mounting static files from {frontend_dir}")
-    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+    app.mount("/", NoCacheStaticFiles(directory=frontend_dir, html=True), name="frontend")
 else:
     logger.warning(f"Frontend folder not found at {frontend_dir}. Static files mount skipped.")
