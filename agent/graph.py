@@ -43,7 +43,7 @@ def extract_text_content(content: Any) -> str:
 def get_llm():
     """Initializes the LLM with timeouts, max_retries, and fallback options."""
     provider = os.getenv("LLM_PROVIDER", "google").lower()
-    model_name = os.getenv("LLM_MODEL", "gemini-1.5-flash")
+    model_name = os.getenv("LLM_MODEL", "gemini-3.5-flash")
     timeout = float(os.getenv("LLM_TIMEOUT", "10.0"))
     max_retries = int(os.getenv("LLM_MAX_RETRIES", "3"))
     
@@ -93,7 +93,7 @@ def get_llm():
     else:
         logger.warning(f"Unsupported LLM provider '{provider}'. Falling back to Google Gemini.")
         return ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model="gemini-3.5-flash",
             temperature=0.0,
             timeout=timeout,
             max_retries=max_retries
@@ -487,6 +487,9 @@ def synthesize_response_node(state: AgentState) -> Dict[str, Any]:
         return {"response": ans}
     except Exception as e:
         logger.error(f"Failed to synthesize response: {e}")
+        err_str = str(e).lower()
+        if "429" in err_str or "resource_exhausted" in err_str or "quota" in err_str:
+            return {"response": "Error: Gemini API rate limit or quota exceeded (429 Resource Exhausted). Please wait a moment or verify your API key's limits. For offline testing, you can set OFFLINE_EVAL=true in your .env file to run without hitting the API."}
         return {"response": "Insufficient verified information is available to answer the query."}
 
 
@@ -521,9 +524,13 @@ def validate_citations_node(state: AgentState) -> Dict[str, Any]:
     answer = state["response"]
     chunks = state["retrieved_chunks"]
     
-    # Special fallback check - if the answer is the fallback string, skip validation to avoid loops
-    if "insufficient verified information" in answer.lower() or "insufficient information" in answer.lower():
-        logger.info("Response is fallback message. Skipping citation validation.")
+    # Special fallback check - if the answer is the fallback string or rate limit message, skip validation to avoid loops
+    if ("insufficient verified information" in answer.lower() or 
+        "insufficient information" in answer.lower() or
+        "quota exceeded" in answer.lower() or
+        "rate limit" in answer.lower() or
+        "resource_exhausted" in answer.lower()):
+        logger.info("Response is fallback or rate limit message. Skipping citation validation.")
         return {"failed_citations": [], "retry_count": state.get("retry_count", 0)}
         
     try:
