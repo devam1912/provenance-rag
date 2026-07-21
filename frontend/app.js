@@ -346,10 +346,17 @@ document.addEventListener("DOMContentLoaded", () => {
         formatted = formatted.replace(/^\* (.*)/gm, "<li>$1</li>");
         formatted = formatted.replace(/^(<li>.*<\/li>)/gms, "<ul>$1</ul>");
 
-        // Convert citation tags [filename#chunk_idx] to clickable tags
+        // Convert citation tags [filename#chunk_idx] to clickable numbered badges (e.g., [1], [2])
         // Example tag: [academic_standing.txt#chunk_3]
-        formatted = formatted.replace(/\[([a-zA-Z0-9_\.-]+#chunk_[0-9]+)\]/g, (match, chunkId) => {
-            return `<a class="citation-link" data-chunk-id="${chunkId}">[${chunkId}]</a>`;
+        let citationIndex = 1;
+        const citationIndices = {};
+        formatted = formatted.replace(/\`?\[([a-zA-Z0-9_\s\(\)\.-]+#chunk_[0-9]+)\]\`?/g, (match, chunkId) => {
+            const trimmedChunk = chunkId.trim();
+            if (!citationIndices[trimmedChunk]) {
+                citationIndices[trimmedChunk] = citationIndex++;
+            }
+            const displayIndex = citationIndices[trimmedChunk];
+            return `<a class="citation-link" data-chunk-id="${trimmedChunk}">[${displayIndex}]</a>`;
         });
 
         // Replace newlines with breaks outside of structured tags
