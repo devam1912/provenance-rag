@@ -302,13 +302,16 @@ def retrieve_chunks_node(state: AgentState) -> Dict[str, Any]:
     
     # RRF Fusion
     fused = reciprocal_rank_fusion(sparse_res, dense_res, k=60)
-    candidate_chunks = [chunk for chunk, _ in fused]
+    candidate_chunks = [
+        chunk for chunk, _ in fused 
+        if "table of contents" not in chunk.text.lower() and "srl  topic" not in chunk.text.lower()
+    ]
     
     # Reranking
     reranked = reranker.rerank(query, candidate_chunks, top_k=5)
     final_chunks = [chunk for chunk, _ in reranked]
     
-    logger.info(f"Direct retrieval successfully fetched {len(final_chunks)} chunks.")
+    logger.info(f"Direct retrieval successfully fetched {len(final_chunks)} chunks: {[c.chunk_id for c in final_chunks]}")
     return {"retrieved_chunks": final_chunks}
 
 
@@ -376,8 +379,9 @@ def decompose_query_node(state: AgentState) -> Dict[str, Any]:
         fused = reciprocal_rank_fusion(sparse_res, dense_res, k=30)
         for chunk, _ in fused:
             if chunk.chunk_id not in seen_ids:
-                seen_ids.add(chunk.chunk_id)
-                aggregated_chunks.append(chunk)
+                if "table of contents" not in chunk.text.lower() and "srl  topic" not in chunk.text.lower():
+                    seen_ids.add(chunk.chunk_id)
+                    aggregated_chunks.append(chunk)
 
     logger.info(f"Aggregated {len(aggregated_chunks)} unique chunks from {len(sub_queries)} sub-queries.")
     return {
