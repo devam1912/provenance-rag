@@ -43,7 +43,7 @@ def extract_text_content(content: Any) -> str:
 def get_llm():
     """Initializes the LLM with timeouts, max_retries, and fallback options."""
     provider = os.getenv("LLM_PROVIDER", "google").lower()
-    model_name = os.getenv("LLM_MODEL", "gemini-3.5-flash")
+    model_name = os.getenv("LLM_MODEL", "gemini-1.5-flash")
     timeout = float(os.getenv("LLM_TIMEOUT", "10.0"))
     max_retries = int(os.getenv("LLM_MAX_RETRIES", "3"))
     
@@ -93,7 +93,7 @@ def get_llm():
     else:
         logger.warning(f"Unsupported LLM provider '{provider}'. Falling back to Google Gemini.")
         return ChatGoogleGenerativeAI(
-            model="gemini-3.5-flash",
+            model="gemini-1.5-flash",
             temperature=0.0,
             timeout=timeout,
             max_retries=max_retries
