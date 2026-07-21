@@ -44,9 +44,9 @@ def validate_citations(
     """
     logger.info("Starting citation validation check...")
     
-    # Parse citations of format [filename#chunk_idx]
-    # e.g., [academic_standing.txt#chunk_3]
-    citation_pattern = r"\[([a-zA-Z0-9_\-\.]+#chunk_\d+)\]"
+    # Parse citations of format [filename#chunk_idx] supporting spaces and parentheses
+    # e.g., [Placement Policy_26-27 (3).txt#chunk_22]
+    citation_pattern = r"\`?\[([a-zA-Z0-9_\s\(\)\-\.]+#chunk_\d+)\]\`?"
     matches = list(re.finditer(citation_pattern, answer))
     
     if not matches:
@@ -69,7 +69,7 @@ def validate_citations(
     failed_citations = []
     
     for match in matches:
-        chunk_id = match.group(1)
+        chunk_id = match.group(1).strip()
         match_start = match.start()
         
         claim = get_cited_sentence(answer, match_start)
