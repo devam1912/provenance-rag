@@ -138,16 +138,26 @@ def get_retrievers():
     global _bm25, _vector, _reranker
     bm25_index_path = os.getenv("BM25_INDEX_PATH", "./data/bm25/bm25.pkl")
     chroma_db_dir = os.getenv("CHROMA_DB_DIR", "./data/chroma")
-    embedding_provider = os.getenv("EMBEDDING_PROVIDER", "local")
     embedding_model = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
     reranker_model = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+    # Auto-disable reranker when using API embeddings (no torch available)
+    if reranker_model != "none" and embedding_provider == "mistral":
+        logger.info("Mistral embedding mode detected — auto-disabling local reranker to save RAM.")
+        reranker_model = "none"
+
+    # Auto-detect embedding provider: if MISTRAL_API_KEY is present and provider is still
+    # the default 'local', switch to 'mistral' to avoid loading PyTorch models into RAM.
+    embedding_provider = os.getenv("EMBEDDING_PROVIDER", "local")
+    if embedding_provider == "local" and os.getenv("MISTRAL_API_KEY"):
+        logger.info("MISTRAL_API_KEY detected and EMBEDDING_PROVIDER not explicitly set — auto-switching to mistral embeddings.")
+        embedding_provider = "mistral"
 
     if _bm25 is None:
         logger.info("Initializing BM25 Retriever singleton...")
         _bm25 = BM25Retriever()
         _bm25.load(bm25_index_path)
     if _vector is None:
-        logger.info("Initializing Vector Retriever singleton...")
+        logger.info(f"Initializing Vector Retriever singleton (provider={embedding_provider})...")
         _vector = VectorRetriever(
             db_dir=chroma_db_dir,
             embedding_provider=embedding_provider,
