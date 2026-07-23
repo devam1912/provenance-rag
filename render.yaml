@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: provenance-rag
+    env: python
+    buildCommand: pip install -r requirements.txt && python -m ingestion.ingest
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: LLM_PROVIDER
+        value: mistral
+      - key: LLM_MODEL
+        value: mistral-small-latest
+      - key: EMBEDDING_PROVIDER
+        value: local
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
