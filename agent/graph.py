@@ -21,7 +21,7 @@ from retrieval.rerank import CrossEncoderReranker
 from grounding.citation_validator import validate_citations
 
 # Load env configurations
-load_dotenv()
+load_dotenv(override=True)
 
 logger = logging.getLogger("agent.graph")
 
@@ -42,21 +42,22 @@ def extract_text_content(content: Any) -> str:
 
 def get_llm():
     """Initializes the LLM with timeouts, max_retries, and fallback options."""
-    provider = os.getenv("LLM_PROVIDER", "google").lower()
+    load_dotenv(override=True)
+    provider = os.getenv("LLM_PROVIDER", "mistral").lower()
     model_name = os.getenv("LLM_MODEL")
     if not model_name:
         if provider == "google":
             model_name = "gemini-3.5-flash"
         elif provider == "mistral":
-            model_name = "mistral-large-latest"
+            model_name = "mistral-small-latest"
         else:
             model_name = "gpt-4o-mini"
             
     if provider == "mistral" and ("gemini" in model_name or not model_name):
-        model_name = "mistral-large-latest"
+        model_name = "mistral-small-latest"
         
-    timeout = float(os.getenv("LLM_TIMEOUT", "10.0"))
-    max_retries = int(os.getenv("LLM_MAX_RETRIES", "3"))
+    timeout = float(os.getenv("LLM_TIMEOUT", "60.0"))
+    max_retries = int(os.getenv("LLM_MAX_RETRIES", "1"))
     
     if provider == "google":
         api_key = os.getenv("GEMINI_API_KEY")
@@ -106,6 +107,7 @@ def get_llm():
         api_key = os.getenv("MISTRAL_API_KEY")
         if not api_key:
             raise ValueError("MISTRAL_API_KEY is required when LLM_PROVIDER=mistral.")
+        logger.info(f"Initializing Mistral LLM: model={model_name}, timeout={timeout}s, max_retries={max_retries}")
         primary_llm = ChatOpenAI(
             model=model_name,
             temperature=0.0,
@@ -114,17 +116,7 @@ def get_llm():
             timeout=timeout,
             max_retries=max_retries
         )
-        fallback_model = os.getenv("LLM_FALLBACK_MODEL", "mistral-large-latest")
-        if fallback_model != model_name:
-            fallback_llm = ChatOpenAI(
-                model=fallback_model,
-                temperature=0.0,
-                openai_api_key=api_key,
-                openai_api_base="https://api.mistral.ai/v1",
-                timeout=timeout,
-                max_retries=max_retries
-            )
-            return primary_llm.with_fallbacks([fallback_llm])
+        # On free tier, skip fallback model to avoid doubling API calls and hitting rate limits
         return primary_llm
     else:
         logger.warning(f"Unsupported LLM provider '{provider}'. Falling back to Google Gemini.")
@@ -222,13 +214,13 @@ def heuristic_route(query: str) -> Dict[str, Any]:
             "failed_citations": []
         }
         
-    # Check clarify
+    # Check clarify - only for truly ambiguous single/two-word inputs
     words = [w for w in q.split() if w.strip()]
-    if len(words) <= 3 and any(w in ["probation", "warning", "rules", "credits", "standing", "limit"] for w in words):
+    if len(words) <= 2 and any(w in ["probation", "warning", "rules", "credits", "standing", "limit"] for w in words):
         return {
             "route": "clarify",
             "tool_input": {},
-            "clarification_message": "Could you please clarify what specific academic standing or credit transfer rule you are asking about?",
+            "clarification_message": "Your question seems brief. Could you please provide more detail? For example, are you asking about academic standing, graduation, transfer credits, or placement/internship policies?",
             "retry_count": 0,
             "failed_citations": []
         }
@@ -262,13 +254,24 @@ def route_query_node(state: AgentState) -> Dict[str, Any]:
         return heuristic_route(query)
     
     system_prompt = (
-        "You are the routing orchestrator for a university academic policy advisor system.\n"
+        "You are the routing orchestrator for a university policy advisor system.\n"
+        "The system has indexed documents covering: academic standing, graduation requirements, "
+        "transfer credits, AND placement/internship policies (switch rules, parallel processes, "
+        "dream offers, PPO framework, company categorization, etc.).\n\n"
         "Evaluate the user's query and decide how to route it.\n\n"
         "Select one of the following execution routes:\n"
-        "1. 'tool_call': Choose this ONLY if the query asks for a GPA/credit check, transfer audit, or graduation status check AND provides specific numeric academic metrics (e.g. GPA, local credits, transfer credits).\n"
-        "2. 'sub_questions': Choose this if the query is a compound query containing multiple distinct questions that need separate policy retrieval steps (e.g. 'What is the community college transfer limit AND how do I apply for graduation?').\n"
-        "3. 'direct_retrieval': Choose this for any clear, direct question about academic rules, limits, or procedures that can be resolved via standard document search (e.g. 'What GPA is required to be on the Dean's List?').\n"
-        "4. 'clarify': Choose this if the query is extremely vague, brief, or completely lacks context (e.g. 'GPA', 'warning', 'rules', 'how do I graduate?').\n\n"
+        "1. 'tool_call': Choose this ONLY if the query asks for a GPA/credit check, transfer audit, "
+        "or graduation status check AND provides specific numeric academic metrics (e.g. GPA, local credits, transfer credits).\n"
+        "2. 'sub_questions': Choose this if the query is a compound query containing multiple distinct "
+        "questions that need separate policy retrieval steps.\n"
+        "3. 'direct_retrieval': Choose this for ANY question about university policies, rules, "
+        "procedures, placement, internship, academic rules, etc. When in doubt, ALWAYS choose "
+        "'direct_retrieval' — the retrieval system will handle finding relevant content.\n"
+        "4. 'clarify': Choose this ONLY if the query is a single word or completely meaningless "
+        "(e.g. just 'GPA', 'hi', 'rules'). Do NOT choose clarify if the user is asking a real question, "
+        "even if it seems unusual.\n\n"
+        "IMPORTANT: Prefer 'direct_retrieval' over 'clarify'. If there is any chance the query could be "
+        "answered from policy documents, choose 'direct_retrieval'.\n\n"
         "You MUST respond ONLY with a raw JSON object matching this schema:\n"
         "{\n"
         '  "route": "direct_retrieval" | "sub_questions" | "tool_call" | "clarify",\n'
@@ -308,10 +311,14 @@ def route_query_node(state: AgentState) -> Dict[str, Any]:
                     "four_year_transfer": decision.get("four_year_transfer") if decision.get("four_year_transfer") is not None else 0.0,
                 }
             
+            clarification_msg = ""
+            if route == "clarify":
+                clarification_msg = f"Your question seems brief. Could you please provide more detail? For example, are you asking about academic standing, graduation, transfer credits, or placement/internship policies?"
+            
             return {
                 "route": route,
                 "tool_input": tool_input,
-                "clarification_message": "Could you please clarify what specific academic standing or credit transfer rule you are asking about?" if route == "clarify" else "",
+                "clarification_message": clarification_msg,
                 "retry_count": 0,
                 "failed_citations": []
             }
@@ -518,15 +525,23 @@ def synthesize_response_node(state: AgentState) -> Dict[str, Any]:
     
     try:
         llm = get_llm()
+        logger.info(f"Sending synthesis request to LLM ({os.getenv('LLM_PROVIDER', 'unknown')}/{os.getenv('LLM_MODEL', 'unknown')})...")
         res = llm.invoke(messages)
         ans = extract_text_content(res.content)
+        logger.info(f"Synthesis response received. Length: {len(ans)} chars")
+        if not ans or len(ans.strip()) < 10:
+            logger.warning(f"LLM returned an empty or very short response: '{ans}'")
+            return {"response": "The model returned an empty response. Please try again."}
         return {"response": ans}
     except Exception as e:
-        logger.error(f"Failed to synthesize response: {e}")
+        logger.error(f"Failed to synthesize response: {type(e).__name__}: {e}")
         err_str = str(e).lower()
-        if "429" in err_str or "resource_exhausted" in err_str or "quota" in err_str:
-            return {"response": "Error: Gemini API rate limit or quota exceeded (429 Resource Exhausted). Please wait a moment or verify your API key's limits. For offline testing, you can set OFFLINE_EVAL=true in your .env file to run without hitting the API."}
-        return {"response": "Insufficient verified information is available to answer the query."}
+        provider_name = os.getenv("LLM_PROVIDER", "LLM").capitalize()
+        if "429" in err_str or "resource_exhausted" in err_str or "quota" in err_str or "rate limit" in err_str:
+            return {"response": f"Error: {provider_name} API rate limit exceeded. The free tier has strict limits — please wait 30-60 seconds and try again."}
+        if "timeout" in err_str or "timed out" in err_str:
+            return {"response": f"Error: {provider_name} request timed out. Please try again."}
+        return {"response": f"Error: Failed to generate response ({type(e).__name__}). Please try again."}
 
 
 # --- CONDITIONAL ROUTER ---
@@ -560,13 +575,17 @@ def validate_citations_node(state: AgentState) -> Dict[str, Any]:
     answer = state["response"]
     chunks = state["retrieved_chunks"]
     
-    # Special fallback check - if the answer is the fallback string or rate limit message, skip validation to avoid loops
-    if ("insufficient verified information" in answer.lower() or 
-        "insufficient information" in answer.lower() or
-        "quota exceeded" in answer.lower() or
-        "rate limit" in answer.lower() or
-        "resource_exhausted" in answer.lower()):
-        logger.info("Response is fallback or rate limit message. Skipping citation validation.")
+    # Special fallback check - if the answer is an error/fallback message, skip validation to avoid loops
+    answer_lower = answer.lower().strip()
+    if (answer_lower.startswith("error:") or
+        "insufficient verified information" in answer_lower or 
+        "insufficient information" in answer_lower or
+        "quota exceeded" in answer_lower or
+        "rate limit" in answer_lower or
+        "resource_exhausted" in answer_lower or
+        "timed out" in answer_lower or
+        "please try again" in answer_lower):
+        logger.info("Response is an error/fallback message. Skipping citation validation.")
         return {"failed_citations": [], "retry_count": state.get("retry_count", 0)}
         
     try:

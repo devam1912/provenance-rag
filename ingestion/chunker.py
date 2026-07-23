@@ -44,6 +44,41 @@ class PolicyChunk:
         )
 
 
+def clean_document_text(content: str) -> str:
+    """Cleans up PDF-extracted text artifact formatting such as single-word lines and excessive blank space."""
+    content = content.replace("\r\n", "\n").replace("\r", "\n")
+    lines = [line.strip() for line in content.split("\n")]
+    
+    cleaned_lines = []
+    buffer = []
+    
+    for line in lines:
+        if not line:
+            if buffer:
+                cleaned_lines.append(" ".join(buffer))
+                buffer = []
+            cleaned_lines.append("")
+        elif (line.startswith("#") or 
+              line.startswith("●") or 
+              line.startswith("•") or 
+              re.match(r"^[\-\*\+]\s+", line) or 
+              re.match(r"^\d+[\.\)]\s+", line)):
+            if buffer:
+                cleaned_lines.append(" ".join(buffer))
+                buffer = []
+            cleaned_lines.append(line)
+        else:
+            buffer.append(line)
+            
+    if buffer:
+        cleaned_lines.append(" ".join(buffer))
+        
+    result = "\n".join(cleaned_lines)
+    result = re.sub(r"[ \t]+", " ", result)
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result
+
+
 class PolicyChunker:
     """Splits policy documents into logical chunks based on heading structures and size limits."""
     
@@ -57,8 +92,10 @@ class PolicyChunker:
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"File not found: {filepath}")
 
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
+
+        content = clean_document_text(content)
 
         # Split content by markdown header syntax
         lines = content.split("\n")

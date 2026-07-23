@@ -71,7 +71,7 @@ async def health_check():
 @app.post("/query", response_model=QueryResponse)
 async def query_endpoint(request: QueryRequest):
     """Executes the Agentic RAG graph on the query request."""
-    logger.info(f"Received query request: {request.query}")
+    logger.info(f"Received query request: '{request.query}' | filter_document: '{request.filter_document}'")
     
     start_time = time.time()
     try:

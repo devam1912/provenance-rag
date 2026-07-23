@@ -112,12 +112,17 @@ body {
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid var(--border-glass);
     border-radius: var(--radius-md);
-    cursor: default;
+    cursor: pointer;
     transition: var(--transition-fast);
 }
 .doc-item:hover {
     background: rgba(255, 255, 255, 0.04);
     border-color: rgba(255, 255, 255, 0.15);
+}
+.doc-item.active {
+    background: rgba(99, 102, 241, 0.12) !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 12px var(--accent-glow) !important;
 }
 .doc-icon {
     font-size: 18px;

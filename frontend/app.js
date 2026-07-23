@@ -350,7 +350,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Example tag: [academic_standing.txt#chunk_3]
         let citationIndex = 1;
         const citationIndices = {};
-        formatted = formatted.replace(/\`?\[([a-zA-Z0-9_\s\(\)\.-]+#chunk_[0-9]+)\]\`?/g, (match, chunkId) => {
+        formatted = formatted.replace(/\`?\[([a-zA-Z0-9_\s\(\)\-\.]+#chunk_[0-9]+)\]\`?/g, (match, chunkId) => {
             const trimmedChunk = chunkId.trim();
             if (!citationIndices[trimmedChunk]) {
                 citationIndices[trimmedChunk] = citationIndex++;
