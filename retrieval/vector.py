@@ -9,6 +9,20 @@ from ingestion.chunker import PolicyChunk
 
 logger = logging.getLogger("retrieval.vector")
 
+
+def _get_mistral_embeddings() -> Embeddings:
+    """Returns Mistral embeddings using the OpenAI-compatible API."""
+    api_key = os.getenv("MISTRAL_API_KEY")
+    if not api_key:
+        raise ValueError("MISTRAL_API_KEY is required when EMBEDDING_PROVIDER=mistral")
+    logger.info("Initializing Mistral Embeddings (API-based, zero local RAM)")
+    return OpenAIEmbeddings(
+        model="mistral-embed",
+        openai_api_key=api_key,
+        openai_api_base="https://api.mistral.ai/v1"
+    )
+
+
 class VectorRetriever:
     """Dense vector retriever using Chroma DB and configurable embeddings (local/OpenAI)."""
 
@@ -31,6 +45,8 @@ class VectorRetriever:
         if self.embedding_provider == "openai":
             logger.info(f"Initializing OpenAI Embeddings with model: {self.embedding_model}")
             return OpenAIEmbeddings(model=self.embedding_model)
+        elif self.embedding_provider == "mistral":
+            return _get_mistral_embeddings()
         else:
             logger.info(f"Initializing Local HuggingFace Embeddings with model: {self.embedding_model}")
             # Use local sentence-transformers
@@ -38,6 +54,7 @@ class VectorRetriever:
                 model_name=self.embedding_model,
                 model_kwargs={"device": "cpu"}
             )
+
 
     def build(self, chunks: List[PolicyChunk]) -> None:
         """Builds a new Chroma vector database from the provided chunks."""

@@ -9,7 +9,9 @@ services:
       - key: LLM_MODEL
         value: mistral-small-latest
       - key: EMBEDDING_PROVIDER
-        value: local
+        value: mistral
+      - key: RERANKER_MODEL
+        value: none
       - key: MISTRAL_API_KEY
         sync: false
       - key: GEMINI_API_KEY
