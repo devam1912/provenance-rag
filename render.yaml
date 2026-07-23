@@ -2,7 +2,7 @@ services:
   - type: web
     name: provenance-rag
     env: python
-    buildCommand: pip install -r requirements.txt && python -m ingestion.ingest
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: LLM_PROVIDER

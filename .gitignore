@@ -6,7 +6,7 @@ __pycache__/
 .pytest_cache/
 
 # Local databases and indexed data
-data/
+data/telemetry.jsonl
 *.db
 *.sqlite
 
