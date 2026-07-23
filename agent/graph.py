@@ -139,18 +139,18 @@ def get_retrievers():
     bm25_index_path = os.getenv("BM25_INDEX_PATH", "./data/bm25/bm25.pkl")
     chroma_db_dir = os.getenv("CHROMA_DB_DIR", "./data/chroma")
     embedding_model = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-    reranker_model = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
-    # Auto-disable reranker when using API embeddings (no torch available)
-    if reranker_model != "none" and embedding_provider == "mistral":
-        logger.info("Mistral embedding mode detected — auto-disabling local reranker to save RAM.")
-        reranker_model = "none"
 
-    # Auto-detect embedding provider: if MISTRAL_API_KEY is present and provider is still
-    # the default 'local', switch to 'mistral' to avoid loading PyTorch models into RAM.
+    # Step 1: Resolve embedding provider (MUST come before reranker logic)
     embedding_provider = os.getenv("EMBEDDING_PROVIDER", "local")
     if embedding_provider == "local" and os.getenv("MISTRAL_API_KEY"):
-        logger.info("MISTRAL_API_KEY detected and EMBEDDING_PROVIDER not explicitly set — auto-switching to mistral embeddings.")
+        logger.info("MISTRAL_API_KEY detected — auto-switching to Mistral API embeddings (no local PyTorch).")
         embedding_provider = "mistral"
+
+    # Step 2: Resolve reranker model — disable when using API embeddings
+    reranker_model = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+    if reranker_model != "none" and embedding_provider == "mistral":
+        logger.info("Mistral embedding mode — auto-disabling local reranker to save RAM.")
+        reranker_model = "none"
 
     if _bm25 is None:
         logger.info("Initializing BM25 Retriever singleton...")
@@ -165,10 +165,11 @@ def get_retrievers():
         )
         _vector.load()
     if _reranker is None:
-        logger.info("Initializing CrossEncoder Reranker singleton...")
+        logger.info(f"Initializing CrossEncoder Reranker singleton (model={reranker_model})...")
         _reranker = CrossEncoderReranker(model_name=reranker_model)
         
     return _bm25, _vector, _reranker
+
 
 
 def reload_retrievers():
